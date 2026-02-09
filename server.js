@@ -11,8 +11,9 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration Middlewares de base
 // Mise à jour CORS pour supporter les requêtes cross-origin du frontend
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://gestockprov1-1-9-fevrier-frontend.onrender.com';
 app.use(cors({
-  origin: '*', // Autorise toutes les origines pour la flexibilité du déploiement
+  origin: FRONTEND_URL,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id']
 }));
@@ -37,5 +38,5 @@ app.use(errorHandler);
 
 app.listen(PORT, async () => {
   await connectDB();
-  console.log(`🚀 GeStockPro API running on http://localhost:${PORT}`);
+  console.log(`🚀 GeStockPro API running on port ${PORT} (FRONTEND_URL=${FRONTEND_URL})`);
 });
