@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration Middlewares de base
 // Mise à jour CORS pour supporter les requêtes cross-origin du frontend
-const FRONTEND_URL = process.env.FRONTEND_URL || '*';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://gestockprov1-1-9-fevrier-frontend.onrender.com';
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -31,8 +31,26 @@ app.use('/api', apiRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'backend', 'uploads')));
 
 // If a frontend `dist` folder exists (single-repo deployment), serve it as static files
-const frontendDist = path.join(process.cwd(), '..', 'dist');
-try {
+// Try common locations and pick the first existing one so deployments are robust.
+const candidateDists = [
+  path.join(process.cwd(), 'dist'),
+  path.join(process.cwd(), '..', 'dist'),
+  path.join(process.cwd(), '..', 'frontend', 'dist')
+];
+let frontendDist = null;
+for (const cand of candidateDists) {
+  try {
+    const stat = require('fs').statSync(cand);
+    if (stat && stat.isDirectory()) {
+      frontendDist = cand;
+      break;
+    }
+  } catch (err) {
+    // ignore missing paths
+  }
+}
+if (frontendDist) {
+  console.log('Serving frontend from', frontendDist);
   // Use express.static to let Express set correct MIME types
   app.use(express.static(frontendDist));
   // SPA fallback: for any non-API GET request, return index.html
@@ -44,8 +62,8 @@ try {
       if (err) next();
     });
   });
-} catch (e) {
-  // ignore if dist doesn't exist
+} else {
+  console.log('No frontend `dist` directory found in candidates:', candidateDists);
 }
 
 // Health Check
