@@ -1,0 +1,318 @@
+BASE_URL=http://localhost:3000/api
+
+--- En-têtes communs ---
+- Content-Type: application/json
+- Authorization: Bearer <JWT_TOKEN>    # JWT obtenu via /auth/login
+- x-tenant-id: <TENANT_ID>             # Optionnel: pour SUPER_ADMIN cibler un tenant
+
+===== AUTH (publique / protégé) =====
+
+POST /api/auth/login
+Headers:
+- Content-Type: application/json
+Body (json):
+{
+  "email": "admin@example.com",
+  "password": "Passw0rd!"
+}
+
+Note: La connexion est bloquée tant que le tenant n'est pas validé (paiement requis). Une tentative renverra 403 TenantNotValidated.
+
+POST /api/auth/register
+Headers:
+- Content-Type: application/json
+Body (json):
+{
+  "companyName": "Ma Société",
+  "admin": { "name": "Admin", "email": "admin@ex.com", "password": "Passw0rd!" }
+}
+
+GET /api/auth/me
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+
+GET /api/auth/users
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN requis
+
+POST /api/auth/users
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+Body (json):
+{
+  "name": "Jean",
+  "email": "jean@ex.com",
+  "role": "EMPLOYEE",
+  "password": "Secret123"
+}
+
+PUT /api/auth/users/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+Body (json): { "name": "Jean Updated" }
+
+DELETE /api/auth/users/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+
+===== PLANS & BILLING =====
+
+GET /api/plans
+Headers: none (publique)
+
+POST /api/billing/subscribe
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+# Role: ADMIN requis (route protégée par tenantIsolation)
+Body (json):
+{
+  "planId": "plan_monthly_001",
+  "paymentMethod": "card_abc123"
+}
+
+===== ADMIN (SUPER_ADMIN) =====
+
+GET /api/admin/stats
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: SUPER_ADMIN requis
+
+POST /api/admin/tenants/:id/toggle
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: SUPER_ADMIN requis
+
+===== TENANT SETTINGS =====
+
+GET /api/settings
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- x-tenant-id: <TENANT_ID>   # facultatif pour SUPER_ADMIN
+# Role: ADMIN requis
+
+PUT /api/settings
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+Body: { "branding": { "name": "New" } }
+
+===== CUSTOMERS =====n
+GET /api/customers/
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Roles: ADMIN, SALES, ACCOUNTANT
+
+GET /api/customers/:id
+Headers: same
+
+POST /api/customers/
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+Body (json):
+{
+  "name": "Client A",
+  "email": "client@ex.com",
+  "phone": "+33123456789"
+}
+
+PUT /api/customers/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+Body (json): { "phone": "+33987654321" }
+
+DELETE /api/customers/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+===== STOCK / INVENTORY =====
+GET /api/stock/
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Roles: ADMIN, STOCK_MANAGER, SALES, ACCOUNTANT
+
+POST /api/stock/
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+Body (json):
+{
+  "sku": "ITEM-001",
+  "name": "Produit X",
+  "quantity": 100,
+  "price": 12.5
+}
+
+POST /api/stock/movements
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+Body (json):
+{
+  "itemId": "ITEM-001",
+  "type": "OUT",
+  "quantity": 5,
+  "reason": "Vente"
+}
+
+POST /api/stock/ai-sync
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+Body (json): { "force": true }
+
+===== CATEGORIES =====
+GET /api/categories
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+POST /api/categories
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+# Role: ADMIN
+Body (json):
+{
+  "name": "Électronique",
+  "description": "Matériel électronique"
+}
+
+PUT /api/categories/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+# Role: ADMIN
+Body (json): { "name": "Électronique Pro" }
+
+DELETE /api/categories/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+===== SUBCATEGORIES =====
+GET /api/subcategories
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+POST /api/subcategories
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+# Role: ADMIN
+Body (json):
+{
+  "categoryId": "<CATEGORY_ID>",
+  "name": "Smartphones",
+  "description": "Téléphones et accessoires"
+}
+
+PUT /api/subcategories/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+# Role: ADMIN
+Body (json): { "name": "Smartphones & Tablettes" }
+
+DELETE /api/subcategories/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+===== AI =====
+GET /api/ai/insights
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Roles: ADMIN, MANAGER
+
+POST /api/ai/forecast-sync
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+# Role: ADMIN
+Body (json): { "period": "next_90_days" }
+
+===== FINANCE =====
+GET /api/finance/report
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Roles: ADMIN, ACCOUNTANT
+
+GET /api/finance/export
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Roles: ADMIN, ACCOUNTANT
+
+===== DOCUMENTS =====
+POST /api/documents/upload
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: multipart/form-data
+# Form field: file -> (fichier)
+# Roles: ADMIN, MANAGER, SALES
+
+GET /api/documents/entity/:type/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+
+GET /api/documents/download/:id
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+
+===== RESILIENCE =====
+GET /api/resilience/backups
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+POST /api/resilience/backups/trigger
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+GET /api/resilience/health
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Role: ADMIN
+
+===== SALES / PAYMENTS =====
+POST /api/sales/payments/callback
+Headers:
+- Content-Type: application/json OR raw body
+- stripe-signature: <STRIPE_SIG>    # si simulation Stripe
+# Webhook: pas d'auth standard, vérifier signature côté serveur
+Body (raw/json): { "id": "evt_123", "type": "invoice.paid", "data": {} }
+
+GET /api/sales/invoices
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+# Roles: ADMIN, ACCOUNTANT, SALES
+
+POST /api/sales/invoices
+Headers:
+- Authorization: Bearer <JWT_TOKEN>
+- Content-Type: application/json
+Body (json):
+{
+  "customerId": "cust_123",
+  "lines": [ { "sku": "ITEM-001", "qty": 2, "unitPrice": 12.5 } ]
+}
+
+===== PAYMENTS RAW WEBHOOK (server raw middleware) =====
+POST /api/payments/webhook
+Headers:
+- Content-Type: application/json
+- stripe-signature: <STRIPE_SIG>
+# Raw body required by server for signature verification
+
+--- Notes & conseils ---
+- Obtenir un JWT: appeler POST /api/auth/login et réutiliser le token dans `Authorization`.
+- Pour tester la multi-tenant API en tant que SUPER_ADMIN, ajouter `x-tenant-id: <TENANT_ID>` pour cibler un tenant.
+- Les routes publiques: /api/auth/login, /api/auth/register, /api/plans.
+- Les uploads doivent utiliser `multipart/form-data` et inclure le champ `file`.
+
+Fin du fichier de tests Postman (format lisible).

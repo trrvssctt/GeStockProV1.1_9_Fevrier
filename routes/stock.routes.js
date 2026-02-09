@@ -1,0 +1,28 @@
+
+import { Router } from 'express';
+import { InventoryController } from '../controllers/InventoryController.js';
+import { StockMovementController } from '../controllers/StockMovementController.js';
+import { InventoryCampaignController } from '../controllers/InventoryCampaignController.js';
+import { checkPermission } from '../middlewares/rbac.js';
+
+const router = Router();
+
+// Catalogue
+router.get('/', checkPermission(['ADMIN', 'STOCK_MANAGER', 'SALES', 'EMPLOYEE']), InventoryController.list);
+router.post('/', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryController.createItem);
+router.put('/:id', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryController.updateItem);
+router.delete('/:id', checkPermission(['ADMIN']), InventoryController.deleteItem);
+
+// Mouvements
+router.get('/movements', checkPermission(['ADMIN', 'STOCK_MANAGER']), StockMovementController.list);
+router.get('/movements/stats', checkPermission(['ADMIN', 'STOCK_MANAGER']), StockMovementController.getStats);
+router.post('/movements/bulk-in', checkPermission(['ADMIN', 'STOCK_MANAGER']), StockMovementController.createBulkIn);
+
+// Audit Inventaire (Nouveau)
+router.get('/campaigns', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.list);
+router.post('/campaigns', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.create);
+router.get('/campaigns/:id', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.getDetails);
+router.put('/campaigns/:campaignId/items/:itemId', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.updateItem);
+router.post('/campaigns/:id/validate', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.validate);
+
+export default router;

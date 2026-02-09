@@ -1,0 +1,338 @@
+
+
+import { AuthService } from '../services/AuthService.js';
+import { User, Tenant, Subscription, Administrator, AuditLog } from '../models/index.js';
+import { Plan } from '../models/Plan.js';
+import { sequelize } from '../config/database.js';
+import { Op } from 'sequelize';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+
+
+
+export class AuthController {
+  /**
+   * Connexion spécifique pour le Maître du Kernel (SuperAdmin)
+   */
+
+
+  static async verifyMFA(req, res) {
+    try {
+      const { userId, code } = req.body;
+      const user = await User.findByPk(userId);
+      
+      if (!user) return res.status(404).json({ error: 'UserNotFound' });
+
+      if (!code || code.length !== 6) {
+        return res.status(401).json({ error: 'InvalidCode', message: 'Code de sécurité incorrect.' });
+      }
+
+      const token = AuthService.generateToken(user);
+      return res.status(200).json({ token, user });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Réinitialisation de mot de passe (ADMIN ONLY)
+   */
+  static async resetUserPassword(req, res) {
+    const transaction = await sequelize.transaction();
+    try {
+      const { id } = req.params;
+      const { newPassword } = req.body;
+
+      if (!newPassword || newPassword.length < 12) {
+         await transaction.rollback();
+         return res.status(400).json({ error: 'SecurityError', message: 'La nouvelle clé doit contenir au moins 12 caractères.' });
+      }
+
+      const where = { id };
+      if (req.user.role !== 'SUPER_ADMIN') {
+        where.tenantId = req.user.tenantId;
+      }
+      
+      const user = await User.findOne({ where, transaction });
+
+      if (!user) {
+        await transaction.rollback();
+        return res.status(404).json({ error: 'UserNotFound', message: 'Utilisateur cible introuvable.' });
+      }
+
+      // Mise à jour cryptographique du hash avec un sel renforcé (cost: 12)
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+      
+      await user.update({ password: hashedPassword }, { transaction });
+
+      // Audit de l'action critique scellé par signature SHA-256
+      const auditPayload = {
+        timestamp: Date.now(),
+        targetId: user.id,
+        operatorId: req.user.id,
+        action: 'RESET_PASSWORD'
+      };
+
+      const signature = crypto.createHash('sha256')
+        .update(JSON.stringify(auditPayload) + (process.env.AUDIT_SECRET || 'GSP_SECRET'))
+        .digest('hex');
+
+      await AuditLog.create({
+        tenantId: req.user.tenantId,
+        userId: req.user.id,
+        userName: req.user.name,
+        action: 'USER_PASSWORD_RESET',
+        resource: `User: ${user.email}`,
+        severity: 'HIGH',
+        status: 'SUCCESS',
+        sha256Signature: signature
+      }, { transaction });
+
+      await transaction.commit();
+      return res.status(200).json({ message: 'Identifiants scellés avec succès.' });
+    } catch (error) {
+      if (transaction) await transaction.rollback();
+      console.error("[KERNEL SECURITY] Password Reset Failure:", error);
+      return res.status(500).json({ error: 'KernelPanic', message: 'Échec de la transaction sécurisée.' });
+    }
+  }
+
+  /**
+   * Activation/Désactivation MFA
+   */
+  static async toggleMFA(req, res) {
+    try {
+      const { id } = req.params;
+      const user = await User.findOne({ where: { id, tenantId: req.user.tenantId } });
+      if (!user) return res.status(404).json({ error: 'UserNotFound' });
+
+      user.mfaEnabled = !user.mfaEnabled;
+      await user.save();
+
+      return res.status(200).json({ mfaEnabled: user.mfaEnabled });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+  static async superAdminLogin(req, res) {
+    try {
+      const emailInput = (req.body.email || '').toLowerCase().trim();
+      const passwordInput = (req.body.password || '').trim();
+      
+      console.log(`[KERNEL AUTH] Tentative: ${emailInput}`);
+
+      const admin = await Administrator.findOne({ 
+        where: sequelize.where(
+          sequelize.fn('LOWER', sequelize.col('email')),
+          '=',
+          emailInput
+        )
+      });
+
+      if (!admin) {
+        console.warn(`[AUTH FAIL] Utilisateur inconnu: ${emailInput}`);
+        return res.status(401).json({ error: 'Accès refusé', message: 'Identifiants Maîtres invalides.' });
+      }
+
+      // Comparaison rigoureuse
+      // Support legacy stored bcrypt hashes that may miss the algorithm prefix
+      let storedHash = admin.password || '';
+      if (!storedHash.startsWith('$2') && /\d+\$/.test(storedHash)) {
+        storedHash = `$2b$${storedHash}`;
+      }
+      const isValid = await bcrypt.compare(passwordInput, storedHash);
+      
+      if (!isValid) {
+        console.warn(`[AUTH FAIL] Mot de passe erroné pour: ${emailInput}`);
+        return res.status(401).json({ error: 'Accès refusé', message: 'Identifiants Maîtres invalides.' });
+      }
+
+      const token = AuthService.generateToken({
+        id: admin.id,
+        name: admin.name,
+        tenantId: 'SYSTEM',
+        roles: ['SUPER_ADMIN']
+      });
+
+      await admin.update({ lastLogin: new Date() });
+      console.log(`[AUTH SUCCESS] Kernel ouvert pour: ${admin.name}`);
+
+      return res.status(200).json({
+        token,
+        user: {
+          id: admin.id,
+          name: admin.name,
+          role: 'SUPER_ADMIN',
+          roles: ['SUPER_ADMIN'],
+          tenantId: 'SYSTEM'
+        }
+      });
+    } catch (error) {
+      console.error('[KERNEL AUTH CRITICAL ERROR]:', error);
+      return res.status(500).json({ error: 'AuthError', message: 'Erreur critique du Kernel d\'authentification.' });
+    }
+  }
+
+static async login(req, res) {
+    try {
+      const email = (req.body.email || '').toLowerCase().trim();
+      const password = (req.body.password || '').trim();
+      
+      const user = await AuthService.validateCredentials(email, password);
+
+      if (!user) return res.status(401).json({ error: 'Identifiants invalides.' });
+      
+      // 1. Récupération de l'état de l'instance (Tenant) et du Plan
+      const tenant = await Tenant.findByPk(user.tenantId);
+      if (!tenant) return res.status(404).json({ error: 'Instance introuvable.' });
+
+      // 2. Blocage Flux-Paiement : Vérification si le compte est actif et à jour
+      const isTrial = tenant.paymentStatus === 'TRIAL';
+      const isUpToDate = tenant.paymentStatus === 'UP_TO_DATE' || isTrial;
+      
+      if (!tenant.isActive || !isUpToDate) {
+        return res.status(403).json({ 
+          error: 'AccessBlocked', 
+          message: 'Accès suspendu : Votre abonnement n’est pas à jour ou l’instance a été verrouillée. Veuillez régulariser votre situation dans l’onglet Paiement.' 
+        });
+      }
+
+      // 3. Récupération du Plan ID depuis la table Subscription
+      const sub = await Subscription.findOne({ where: { tenantId: user.tenantId } });
+      const planId = sub ? sub.planId : 'FREE_TRIAL';
+
+      // 4. Génération du token incluant le planId pour le frontend
+      const token = AuthService.generateToken({
+        ...user.toJSON(),
+        planId: planId
+      });
+
+      const userRoles = Array.isArray(user.roles) ? user.roles : [user.role || 'EMPLOYEE'];
+      
+      return res.status(200).json({ 
+        token, 
+        user: { 
+          id: user.id, 
+          name: user.name, 
+          role: userRoles[0], 
+          roles: userRoles, 
+          tenantId: user.tenantId,
+          planId: planId
+        } 
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async register(req, res) {
+    const transaction = await sequelize.transaction();
+    try {
+      const { companyName, siret, admin, planId } = req.body;
+
+      const tenant = await Tenant.create({
+        name: companyName,
+        siret,
+        domain: `${companyName.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString().slice(-4)}.gestock.pro`,
+        paymentStatus: planId === 'FREE_TRIAL' ? 'TRIAL' : 'PENDING',
+        isActive: true,
+        currency: 'F CFA'
+      }, { transaction });
+
+      const user = await User.create({
+        email: admin.email,
+        password: admin.password,
+        name: admin.name || 'Propriétaire',
+        role: 'ADMIN',
+        roles: ['ADMIN'], 
+        tenantId: tenant.id
+      }, { transaction });
+
+      await Subscription.create({
+        tenantId: tenant.id,
+        planId: planId || 'FREE_TRIAL',
+        status: planId === 'FREE_TRIAL' ? 'TRIAL' : 'PENDING',
+        nextBillingDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      }, { transaction });
+
+      await transaction.commit();
+      const token = AuthService.generateToken(user);
+
+      return res.status(201).json({ 
+        token,
+        user: { 
+          id: user.id, 
+          name: user.name, 
+          role: 'ADMIN', 
+          roles: ['ADMIN'], 
+          tenantId: tenant.id 
+        },
+        subscription: {
+          planId: planId || 'FREE_TRIAL',
+          status: planId === 'FREE_TRIAL' ? 'TRIAL' : 'PENDING'
+        }
+      });
+    } catch (error) {
+      if (transaction) await transaction.rollback();
+      return res.status(500).json({ 
+        error: 'RegisterError', 
+        message: 'Échec du déploiement de l\'instance.',
+        details: error.message 
+      });
+    }
+  }
+
+  static async listUsers(req, res) {
+    try {
+      const users = await User.findAll({ where: { tenantId: req.user.tenantId } });
+      return res.status(200).json(users);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async getUser(req, res) {
+    try {
+      const user = await User.findOne({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      return res.status(200).json(user);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async createUser(req, res) {
+    try {
+      const user = await User.create({ 
+        ...req.body, 
+        tenantId: req.user.tenantId 
+      });
+      return res.status(201).json(user);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async updateUser(req, res) {
+    try {
+      const user = await User.findOne({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      await user.update(req.body);
+      return res.status(200).json(user);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async deleteUser(req, res) {
+    try {
+      const user = await User.findOne({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      await user.destroy();
+      return res.status(204).send();
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+}
