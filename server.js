@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration Middlewares de base
 // Mise à jour CORS pour supporter les requêtes cross-origin du frontend
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://gestockprov1-1-9-fevrier-frontend.onrender.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -57,7 +57,10 @@ if (frontendDist) {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
     const indexPath = path.join(frontendDist, 'index.html');
+    // Prevent CDN/browser from caching the HTML entrypoint so clients always
+    // fetch the latest asset manifest (avoids mismatched hashed bundles).
     res.type('html');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.sendFile(indexPath, (err) => {
       if (err) next();
     });
