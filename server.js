@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration Middlewares de base
 // Mise à jour CORS pour supporter les requêtes cross-origin du frontend
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://gestockprov1-1-9-fevrier-frontend.onrender.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -29,6 +29,24 @@ app.use('/api', apiRoutes);
 
 // Serve uploaded files (fallback local storage)
 app.use('/uploads', express.static(path.join(process.cwd(), 'backend', 'uploads')));
+
+// If a frontend `dist` folder exists (single-repo deployment), serve it as static files
+const frontendDist = path.join(process.cwd(), '..', 'dist');
+try {
+  // Use express.static to let Express set correct MIME types
+  app.use(express.static(frontendDist));
+  // SPA fallback: for any non-API GET request, return index.html
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
+    const indexPath = path.join(frontendDist, 'index.html');
+    res.type('html');
+    res.sendFile(indexPath, (err) => {
+      if (err) next();
+    });
+  });
+} catch (e) {
+  // ignore if dist doesn't exist
+}
 
 // Health Check
 app.get('/health', (req, res) => res.send('GeStockPro Kernel Online'));
