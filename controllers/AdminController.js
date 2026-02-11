@@ -77,7 +77,11 @@ export class AdminController {
       usersByRoleRaw.forEach(r => { usersByRole[r.role] = parseInt(r.get('cnt'),10); });
 
       // Subscription alerts (next billing within 7 days or expired)
-      const subs = await Subscription.findAll({ where: { nextBillingDate: { [Op.lte]: new Date(new Date().setDate(new Date().getDate() + 7)) } }, include: [{ model: Tenant, attributes: ['name'] }], limit: 50 });
+      // Scope to the requested tenant when applicable so tenant-admins only see their own alerts.
+      const subsThreshold = new Date();
+      subsThreshold.setDate(subsThreshold.getDate() + 7);
+      const subsWhere = requestedTenantId ? { tenantId: requestedTenantId, nextBillingDate: { [Op.lte]: subsThreshold } } : { nextBillingDate: { [Op.lte]: subsThreshold } };
+      const subs = await Subscription.findAll({ where: subsWhere, include: [{ model: Tenant, attributes: ['name'] }], limit: 50 });
 
       // Pending validations: subscriptions that require manual validation (e.g. PENDING)
       const pendingValidationsRaw = await Subscription.findAll({ where: { status: 'PENDING' }, include: [{ model: Tenant, attributes: ['id','name','domain'] }], limit: 50 });
@@ -153,7 +157,7 @@ export class AdminController {
         users: { count: usersCount, byRole: usersByRole, recent: recentUsers.map(u => ({ id: u.id, name: u.name, email: u.email, lastLogin: u.lastLogin, role: u.role || 'EMPLOYEE' })) },
         subscriptionAlerts: subs.map(s => ({ tenant: s.Tenant?.name, nextBillingDate: s.nextBillingDate, status: s.status })),
         // Provide a small subscription preview (nearest next billing) so frontend can show alerts
-        subscription: subs && subs.length > 0 ? { subscription: { nextBillingDate: subs[0].nextBillingDate, tenant: subs[0].Tenant?.name, status: subs[0].status } } : null,
+        subscription: subs && subs.length > 0 ? { subscription: { nextBillingDate: subs[0].nextBillingDate, tenant: subs[0].Tenant?.name, status: subs[0].status, planId: subs[0].planId } } : null,
         // Provide an array of stock items for the dashboard to display
         stocks: recentStocks.map(s => ({ id: s.id, name: s.name, currentLevel: s.currentLevel, minThreshold: s.minThreshold, sku: s.sku })) ,
         pendingValidations,
