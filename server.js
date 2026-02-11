@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 // Configuration Middlewares de base
 // Mise à jour CORS pour supporter les requêtes cross-origin du frontend
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://gestockprov1-1-9-fevrier-frontend.onrender.com';
+const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
