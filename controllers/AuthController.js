@@ -182,6 +182,10 @@ static async login(req, res) {
       const user = await AuthService.validateCredentials(email, password);
 
       if (!user) return res.status(401).json({ error: 'Identifiants invalides.' });
+      // Bloquer les utilisateurs désactivés
+      if (user.isActive === false || (user.dataValues && user.dataValues.is_active === false)) {
+        return res.status(403).json({ error: 'AccountDisabled', message: 'Compte désactivé. Contactez un administrateur.' });
+      }
       
       // 1. Récupération de l'état de l'instance (Tenant) et du Plan
       const tenant = await Tenant.findByPk(user.tenantId);
@@ -190,17 +194,42 @@ static async login(req, res) {
       // 2. Blocage Flux-Paiement : Vérification si le compte est actif et à jour
       const isTrial = tenant.paymentStatus === 'TRIAL';
       const isUpToDate = tenant.paymentStatus === 'UP_TO_DATE' || isTrial;
-      
-      if (!tenant.isActive || !isUpToDate) {
-        return res.status(403).json({ 
-          error: 'AccessBlocked', 
-          message: 'Accès suspendu : Votre abonnement n’est pas à jour ou l’instance a été verrouillée. Veuillez régulariser votre situation dans l’onglet Paiement.' 
-        });
+
+      // If the tenant has been administratively deactivated, block access for everyone
+      if (!tenant.isActive) {
+        return res.status(403).json({ error: 'AccessBlocked', message: 'Instance désactivée. Contactez le support.' });
       }
 
-      // 3. Récupération du Plan ID depuis la table Subscription
+      // If payments are not up-to-date, allow ADMIN or SUPER_ADMIN to login (for remediation), block others
+      if (!isUpToDate) {
+        const userRoles = Array.isArray(user.roles) ? user.roles : [user.role || 'EMPLOYEE'];
+        if (!(userRoles.includes('ADMIN') || userRoles.includes('SUPER_ADMIN'))) {
+          return res.status(403).json({ 
+            error: 'AccessBlocked', 
+            message: 'Accès suspendu : Votre abonnement n’est pas à jour ou l’instance a été verrouillée. Veuillez régulariser votre situation dans l’onglet Paiement.' 
+          });
+        }
+        // Admins are allowed to proceed
+      }
+
+      // 3. Récupération du Plan / Subscription depuis la table Subscription
       const sub = await Subscription.findOne({ where: { tenantId: user.tenantId } });
       const planId = sub ? sub.planId : 'FREE_TRIAL';
+      // Récupérer les détails du plan pour exposer les modules/permissions
+      let planDetails = null;
+      if (sub && sub.planId) {
+        const planRecord = await Plan.findByPk(sub.planId);
+        if (planRecord) {
+          planDetails = {
+            id: planRecord.id,
+            name: planRecord.name,
+            priceMonthly: planRecord.priceMonthly,
+            maxUsers: planRecord.maxUsers,
+            hasAiChatbot: !!planRecord.hasAiChatbot,
+            hasStockForecast: !!planRecord.hasStockForecast
+          };
+        }
+      }
 
       // 4. Génération du token incluant le planId pour le frontend
       const token = AuthService.generateToken({
@@ -209,18 +238,22 @@ static async login(req, res) {
       });
 
       const userRoles = Array.isArray(user.roles) ? user.roles : [user.role || 'EMPLOYEE'];
-      
-      return res.status(200).json({ 
-        token, 
-        user: { 
-          id: user.id, 
-          name: user.name, 
-          role: userRoles[0], 
-          roles: userRoles, 
-          tenantId: user.tenantId,
-          planId: planId
-        } 
-      });
+
+      // 5. Construire une réponse enrichie contenant l'état du tenant, de l'abonnement et les modules du plan
+      const responseUser = {
+        id: user.id,
+        name: user.name,
+        role: userRoles[0],
+        roles: userRoles,
+        tenantId: user.tenantId,
+        isActive: user.isActive === undefined ? true : user.isActive,
+        planId: planDetails?.id || (sub ? sub.planId : planId),
+        subscription: sub ? { planId: sub.planId, status: sub.status, nextBillingDate: sub.nextBillingDate } : null,
+        plan: planDetails,
+        tenant: { isActive: tenant.isActive, paymentStatus: tenant.paymentStatus }
+      };
+
+      return res.status(200).json({ token, user: responseUser });
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
@@ -318,6 +351,13 @@ static async login(req, res) {
     try {
       const user = await User.findOne({ where: { id: req.params.id, tenantId: req.user.tenantId } });
       if (!user) return res.status(404).json({ error: 'User not found' });
+      // Empêcher la désactivation d'un ADMIN via l'API
+      if ((req.body.hasOwnProperty('is_active') || req.body.hasOwnProperty('isActive')) && (req.body.is_active === false || req.body.isActive === false)) {
+        const roles = Array.isArray(user.roles) ? user.roles : [user.role];
+        if (roles.includes('ADMIN')) {
+          return res.status(403).json({ error: 'Forbidden', message: 'Impossible de désactiver un administrateur.' });
+        }
+      }
       await user.update(req.body);
       return res.status(200).json(user);
     } catch (error) {

@@ -120,6 +120,21 @@ export class SubscriptionController {
         sha256Signature: crypto.createHash('sha256').update(`${tenantId}:${planId}:${Date.now()}`).digest('hex')
       }, { transaction });
 
+      // 5. Record a pending payment entry for this subscription attempt
+      try {
+        await Payment.create({
+          tenantId,
+          saleId: null,
+          amount: Number(plan.priceMonthly || 0) || 0,
+          method: paymentMethod || 'WAVE',
+          reference: `réabonnnement-${planId}`,
+          status: 'PENDING',
+          paymentDate: new Date()
+        }, { transaction });
+      } catch (e) {
+        console.warn('[PAYMENT RECORD FAILED]', e.message || e);
+      }
+
       await transaction.commit();
 
       return res.status(200).json({

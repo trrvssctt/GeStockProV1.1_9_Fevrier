@@ -5,7 +5,7 @@ export class SubcategoryController {
     try {
       const subcats = await Subcategory.findAll({ 
         where: { 
-          tenant_id: req.user.tenantId,
+          tenantId: req.user.tenantId,
           status: 'actif' 
         }, 
         order: [['name','ASC']] 
@@ -21,11 +21,11 @@ export class SubcategoryController {
       const tenantId = req.user.tenantId;
       const { name, description, categoryId } = req.body;
       
-      const cat = await Category.findOne({ where: { id: categoryId, tenant_id: tenantId, status: 'actif' } });
+      const cat = await Category.findOne({ where: { id: categoryId, tenantId: tenantId, status: 'actif' } });
       if (!cat) return res.status(400).json({ error: 'CreateError', message: 'Catégorie parent introuvable.' });
 
       const existing = await Subcategory.findOne({ 
-        where: { tenant_id: tenantId, category_id: categoryId, name, status: 'actif' } 
+        where: { tenantId: tenantId, categoryId: categoryId, name, status: 'actif' } 
       });
       if (existing) return res.status(400).json({ error: 'CreateError', message: 'Cette sous-catégorie existe déjà dans ce segment.' });
 
@@ -42,7 +42,7 @@ export class SubcategoryController {
       const tenantId = req.user.tenantId;
 
       // Vérification des dépendances produits avant modification
-      const productCount = await StockItem.count({ where: { subcategory_id: id, tenant_id: tenantId } });
+      const productCount = await StockItem.count({ where: { subcategoryId: id, tenantId: tenantId } });
       if (productCount > 0) {
         return res.status(403).json({ 
           error: 'UpdateLocked', 
@@ -50,7 +50,7 @@ export class SubcategoryController {
         });
       }
 
-      const sc = await Subcategory.findOne({ where: { id, tenant_id: tenantId, status: 'actif' } });
+      const sc = await Subcategory.findOne({ where: { id, tenantId: tenantId, status: 'actif' } });
       if (!sc) return res.status(404).json({ error: 'NotFound', message: 'Sous-catégorie introuvable.' });
       
       await sc.update(req.body);
@@ -66,7 +66,7 @@ export class SubcategoryController {
       const tenantId = req.user.tenantId;
 
       // 1. Vérification stricte des produits liés
-      const productCount = await StockItem.count({ where: { subcategory_id: id, tenant_id: tenantId } });
+      const productCount = await StockItem.count({ where: { subcategoryId: id, tenantId: tenantId } });
       if (productCount > 0) {
         return res.status(403).json({ 
           error: 'DeleteLocked', 
@@ -74,7 +74,7 @@ export class SubcategoryController {
         });
       }
 
-      const sc = await Subcategory.findOne({ where: { id, tenant_id: tenantId, status: 'actif' } });
+      const sc = await Subcategory.findOne({ where: { id, tenantId: tenantId, status: 'actif' } });
       if (!sc) return res.status(404).json({ error: 'NotFound', message: 'Sous-catégorie introuvable ou déjà supprimée.' });
       
       // 2. Suppression logique : Changement de statut

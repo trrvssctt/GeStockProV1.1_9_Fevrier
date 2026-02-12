@@ -42,6 +42,7 @@ export class PaymentController {
           amount: amount || 0,
           method: provider || 'MOBILE_MONEY',
           reference: transactionId || `SUB-INITIAL-${Date.now()}`,
+          status: status || 'PENDING',
           paymentDate: new Date()
         });
         console.log(`ℹ️ Subscription Payment event ${transactionId || 'N/A'} recorded for ${tenant.name} (status=${status})`);
