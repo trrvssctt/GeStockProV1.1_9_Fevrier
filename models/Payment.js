@@ -15,6 +15,7 @@ Payment.init({
     allowNull: false 
   },
   reference: { type: DataTypes.STRING(100) }, // ID transaction mobile ou bank
+  status: { type: DataTypes.STRING(20), defaultValue: 'PENDING', field: 'statut' },
   paymentDate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW, field: 'payment_date' }
 }, { 
   sequelize, 
