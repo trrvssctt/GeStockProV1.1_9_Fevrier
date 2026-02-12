@@ -6,7 +6,8 @@ import { checkPermission } from '../middlewares/rbac.js';
 const router = Router();
 
 // Lecture : Ouvert aux Admins, Managers et Employés
-router.get('/', checkPermission(['ADMIN', 'STOCK_MANAGER', 'EMPLOYEE']), SubcategoryController.list);
+// Lecture : Ouvert aux Admins, Managers, Employés et Comptables (lecture seule pour ACCOUNTANT)
+router.get('/', checkPermission(['ADMIN', 'STOCK_MANAGER', 'EMPLOYEE', 'ACCOUNTANT']), SubcategoryController.list);
 
 // Écriture : Autorisé pour ADMIN et STOCK_MANAGER
 router.post('/', checkPermission(['ADMIN', 'STOCK_MANAGER']), SubcategoryController.create);
