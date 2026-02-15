@@ -290,6 +290,43 @@ export class AdminController {
     }
   }
 
+  /**
+   * Retourne les logs d'audit (filtres: tenantId, userId, q, limit, offset)
+   */
+  static async getLogs(req, res) {
+    try {
+      const { tenantId, userId, q, limit = 200, offset = 0 } = req.query;
+      const where = {};
+      if (tenantId) where.tenantId = tenantId;
+      if (userId) where.userId = userId;
+      if (q) where[Op.or] = [
+        { action: { [Op.iLike]: `%${q}%` } },
+        { resource: { [Op.iLike]: `%${q}%` } },
+        { userName: { [Op.iLike]: `%${q}%` } }
+      ];
+
+      const logs = await AuditLog.findAll({ where, order: [['createdAt', 'DESC']], limit: parseInt(limit, 10), offset: parseInt(offset, 10) });
+      return res.status(200).json(logs.map(l => ({ id: l.id, tenantId: l.tenantId, userId: l.userId, userName: l.userName, action: l.action, resource: l.resource, status: l.status, severity: l.severity, createdAt: l.createdAt })));
+    } catch (error) {
+      console.error('[GET LOGS ERROR]', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Liste les utilisateurs d'un tenant (support pour SuperAdmin views)
+   */
+  static async listUsersForTenant(req, res) {
+    try {
+      const { id } = req.params;
+      const users = await User.findAll({ where: { tenantId: id }, order: [['createdAt', 'DESC']] });
+      return res.status(200).json(users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })));
+    } catch (error) {
+      console.error('[LIST USERS FOR TENANT ERROR]', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
   static async createPlan(req, res) {
     try {
       const plan = await Plan.create(req.body);
