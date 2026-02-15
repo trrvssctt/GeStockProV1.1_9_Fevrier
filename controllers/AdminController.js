@@ -360,8 +360,109 @@ export class AdminController {
 
   static async sendEmailToOwner(req, res) {
     try {
-      return res.status(200).json({ message: 'Email envoyé' });
+      const { tenantId, tenantName, subject, body: bodyText, toEmail } = req.body || {};
+      let tenant = null;
+      if (tenantId) tenant = await Tenant.findByPk(tenantId);
+      else if (tenantName) tenant = await Tenant.findOne({ where: { name: tenantName } });
+
+      const recipients = [];
+      if (toEmail) recipients.push(toEmail);
+      if (tenant) {
+        if (tenant.contactEmail) recipients.push(tenant.contactEmail);
+        if (tenant.email) recipients.push(tenant.email);
+        // find admin/owner users
+        try {
+          const admins = await User.findAll({ where: { tenantId: tenant.id, role: { [Op.in]: ['OWNER', 'ADMIN'] } } });
+          admins.forEach(a => { if (a.email) recipients.push(a.email); });
+        } catch (e) {
+          console.warn('[SEND EMAIL] unable to query tenant users', e.message || e);
+        }
+      }
+
+      // dedupe and filter
+      const toList = Array.from(new Set((recipients || []).filter(Boolean)));
+      if (toList.length === 0) return res.status(400).json({ error: 'Aucun destinataire trouvé' });
+
+      const to = toList.join(',');
+
+      // Prepare audit user info: only set `userId` when that user exists in `users` table
+      let auditUserId = null;
+      let auditUserName = 'SYSTEM';
+      try {
+        if (req.user && req.user.id) {
+          const foundUser = await User.findByPk(req.user.id);
+          if (foundUser) auditUserId = req.user.id;
+          auditUserName = req.user.name || (foundUser ? foundUser.name : auditUserName);
+        }
+      } catch (e) {
+        console.warn('[AUDIT USER LOOKUP FAILED]', e.message || e);
+      }
+
+      // Attempt to send via SMTP if configured. Capture any SMTP error for diagnostics
+      let smtpError = null;
+      if (process.env.SMTP_HOST && process.env.SMTP_PORT) {
+        try {
+          const nodemailer = (await import('nodemailer')).default;
+          const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT) || 587,
+            secure: process.env.SMTP_SECURE === 'true',
+            auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
+          });
+
+          const mailOptions = {
+            from: process.env.SMTP_FROM || 'no-reply@kernel-saas.local',
+            to,
+            subject: subject || 'Notification Kernel SaaS',
+            text: bodyText || '',
+            html: bodyText ? (String(bodyText).replace(/\n/g, '<br/>')) : undefined
+          };
+
+          const info = await transporter.sendMail(mailOptions);
+          try {
+            await AuditLog.create({
+              tenantId: tenant ? tenant.id : null,
+              userId: auditUserId,
+              userName: auditUserName,
+              action: 'EMAIL_SENT',
+              resource: `To:${to} Subject:${mailOptions.subject}`,
+              severity: 'LOW',
+              sha256Signature: crypto.createHash('sha256').update(`EMAIL_SENT:${to}:${Date.now()}`).digest('hex')
+            });
+          } catch (auditErr) {
+            console.error('[AUDIT CREATE FAILED AFTER SMTP SEND]', auditErr);
+            // return success to client but include audit warning
+            return res.status(200).json({ message: 'Email envoyé (audit log failed)', info, auditError: String(auditErr?.message || auditErr) });
+          }
+
+          return res.status(200).json({ message: 'Email envoyé', info });
+        } catch (err) {
+          console.error('[SMTP SEND ERROR]', err);
+          smtpError = String(err?.message || err);
+          // fallthrough to queued fallback
+        }
+      }
+
+      // Fallback: queue/log the message in AuditLog when SMTP not configured or send failed
+      try {
+        await AuditLog.create({
+          tenantId: tenant ? tenant.id : null,
+          userId: auditUserId,
+          userName: auditUserName,
+          action: 'EMAIL_QUEUED',
+          resource: `To:${to} Subject:${subject || 'no-subject'} Body:${String(bodyText || '').slice(0,240)}`,
+          severity: 'LOW',
+          sha256Signature: crypto.createHash('sha256').update(`EMAIL_QUEUE:${to}:${Date.now()}`).digest('hex')
+        });
+      } catch (auditErr) {
+        console.error('[AUDIT CREATE FAILED FOR QUEUED EMAIL]', auditErr);
+        // don't fail the request entirely; return a helpful 200 with diagnostic info
+        return res.status(200).json({ message: 'SMTP non configuré ou envoi échoué, tentative de mise en file échouée (audit log)', queuedTo: to, smtpError, auditError: String(auditErr?.message || auditErr) });
+      }
+
+      return res.status(200).json({ message: 'SMTP non configuré ou envoi échoué, message mis en file (audit log)', queuedTo: to, smtpError });
     } catch (error) {
+      console.error('[SEND EMAIL ERROR]', error);
       return res.status(500).json({ error: error.message });
     }
   }
