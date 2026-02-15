@@ -8,8 +8,8 @@ Customer.init({
   tenantId: { type: DataTypes.UUID, allowNull: false, field: 'tenant_id' },
   companyName: { type: DataTypes.STRING, allowNull: true, field: 'company_name' },
   mainContact: { type: DataTypes.STRING, field: 'main_contact' },
-  email: { type: DataTypes.STRING, allowNull: false },
-  phone: { type: DataTypes.STRING },
+  email: { type: DataTypes.STRING, allowNull: true },
+  phone: { type: DataTypes.STRING, allowNull: false },
   billingAddress: { type: DataTypes.TEXT, field: 'billing_address' },
   siret: { type: DataTypes.STRING },
   tvaIntra: { type: DataTypes.STRING, field: 'tva_intra' },
@@ -40,8 +40,19 @@ Customer.init({
   modelName: 'customer',
   tableName: 'customers',
   underscored: true,
+  hooks: {
+    beforeCreate: (customer) => {
+      if ((customer.companyName === null || customer.companyName === undefined || String(customer.companyName).trim() === '') && customer.mainContact) {
+        customer.companyName = customer.mainContact;
+      }
+    },
+    beforeUpdate: (customer) => {
+      if ((customer.companyName === null || customer.companyName === undefined || String(customer.companyName).trim() === '') && customer.mainContact) {
+        customer.companyName = customer.mainContact;
+      }
+    }
+  },
   indexes: [
-    { unique: true, fields: ['tenant_id', 'email'], where: { status: 'actif' } },
     { unique: true, fields: ['tenant_id', 'company_name'], where: { status: 'actif' } }
   ]
 });
