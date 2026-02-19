@@ -1,0 +1,45 @@
+
+-- TABLE DES VENTES (EN-TÊTE)
+CREATE TABLE sales (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+    reference VARCHAR(50) UNIQUE NOT NULL,
+    status VARCHAR(20) DEFAULT 'EN_COURS', -- EN_COURS, TERMINE, ANNULE, REMBOURSE
+    total_ht NUMERIC(15, 2) DEFAULT 0,
+    total_ttc NUMERIC(15, 2) DEFAULT 0,
+    tax_amount NUMERIC(15, 2) DEFAULT 0,
+    amount_paid NUMERIC(15, 2) DEFAULT 0,
+    sale_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- TABLE DES LIGNES DE VENTE
+CREATE TABLE sale_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sale_id UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+    stock_item_id UUID NOT NULL REFERENCES stock_items(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(15, 2) NOT NULL,
+    tax_rate NUMERIC(5, 2) DEFAULT 18.00,
+    total_ttc NUMERIC(15, 2) NOT NULL
+);
+
+-- TABLE DES PAIEMENTS
+CREATE TABLE payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    sale_id UUID NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+    amount NUMERIC(15, 2) NOT NULL,
+    method VARCHAR(30) NOT NULL, -- CASH, MOBILE_MONEY, STRIPE, etc.
+    reference VARCHAR(100),
+    payment_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- INDEX POUR LA PERFORMANCE MULTI-TENANT
+CREATE INDEX idx_sales_tenant ON sales(tenant_id);
+CREATE INDEX idx_payments_tenant ON payments(tenant_id);
+CREATE INDEX idx_sale_items_sale ON sale_items(sale_id);
