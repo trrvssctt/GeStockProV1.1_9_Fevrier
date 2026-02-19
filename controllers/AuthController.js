@@ -30,7 +30,8 @@ export class AuthController {
       const token = AuthService.generateToken(user);
       return res.status(200).json({ token, user });
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      console.error('[AUTH LOGIN ERROR]:', error);
+      return res.status(500).json({ error: 'InternalServerError', message: error.message });
     }
   }
 
@@ -112,7 +113,8 @@ export class AuthController {
 
       return res.status(200).json({ mfaEnabled: user.mfaEnabled });
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      console.error('[AUTH LOGIN ERROR]:', error);
+      return res.status(500).json({ error: 'AuthError', message: error.message });
     }
   }
   static async superAdminLogin(req, res) {
@@ -262,15 +264,42 @@ static async login(req, res) {
   static async register(req, res) {
     const transaction = await sequelize.transaction();
     try {
-      const { companyName, siret, admin, planId } = req.body;
+      const {
+        companyName,
+        company_name,
+        siret,
+        admin,
+        planId,
+        phone,
+        address,
+        primaryColor,
+        primary_color,
+        buttonColor,
+        button_color,
+        fontFamily,
+        font_family,
+        baseFontSize,
+        base_font_size,
+        theme
+      } = req.body;
+
+      const name = companyName || company_name || (admin && admin.companyName) || 'Nouvelle Entreprise';
 
       const tenant = await Tenant.create({
-        name: companyName,
+        name,
         siret,
-        domain: `${companyName.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString().slice(-4)}.gestock.pro`,
+        phone: phone ?? null,
+        address: address ?? null,
+        email: (admin && admin.email) || null,
+        domain: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString().slice(-4)}.gestock.pro`,
         paymentStatus: planId === 'FREE_TRIAL' ? 'TRIAL' : 'PENDING',
         isActive: true,
-        currency: 'F CFA'
+        currency: 'F CFA',
+        primaryColor: primaryColor || primary_color || undefined,
+        buttonColor: buttonColor || button_color || undefined,
+        fontFamily: fontFamily || font_family || undefined,
+        baseFontSize: baseFontSize || base_font_size || undefined,
+        theme: theme || undefined
       }, { transaction });
 
       const user = await User.create({
@@ -299,7 +328,19 @@ static async login(req, res) {
           name: user.name, 
           role: 'ADMIN', 
           roles: ['ADMIN'], 
-          tenantId: tenant.id 
+          tenantId: tenant.id,
+          tenant: {
+            id: tenant.id,
+            name: tenant.name,
+            domain: tenant.domain,
+            primaryColor: tenant.primaryColor,
+            buttonColor: tenant.buttonColor,
+            theme: tenant.theme,
+            fontFamily: tenant.fontFamily,
+            baseFontSize: tenant.baseFontSize,
+            isActive: tenant.isActive,
+            paymentStatus: tenant.paymentStatus
+          }
         },
         subscription: {
           planId: planId || 'FREE_TRIAL',

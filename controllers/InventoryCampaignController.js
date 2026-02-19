@@ -158,4 +158,46 @@ export class InventoryCampaignController {
       return res.status(400).json({ error: 'ValidationError', message: error.message });
     }
   }
+
+  static async suspend(req, res) {
+    try {
+      const { id } = req.params;
+      const tenantId = req.user.tenantId;
+      const campaign = await InventoryCampaign.findOne({ where: { id, tenantId } });
+      if (!campaign) return res.status(404).json({ error: 'Campagne introuvable' });
+      if (campaign.status === 'VALIDATED') return res.status(400).json({ error: 'Cette campagne est déjà clôturée et ne peut être suspendue.' });
+      await campaign.update({ status: 'SUSPENDED' });
+      return res.status(200).json({ message: 'Campagne suspendue avec succès.', campaign });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async cancel(req, res) {
+    try {
+      const { id } = req.params;
+      const tenantId = req.user.tenantId;
+      const campaign = await InventoryCampaign.findOne({ where: { id, tenantId } });
+      if (!campaign) return res.status(404).json({ error: 'Campagne introuvable' });
+      if (campaign.status === 'VALIDATED') return res.status(400).json({ error: 'Une campagne clôturée ne peut pas être annulée.' });
+      await campaign.update({ status: 'CANCELLED' });
+      return res.status(200).json({ message: 'Campagne annulée avec succès.', campaign });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async resume(req, res) {
+    try {
+      const { id } = req.params;
+      const tenantId = req.user.tenantId;
+      const campaign = await InventoryCampaign.findOne({ where: { id, tenantId } });
+      if (!campaign) return res.status(404).json({ error: 'Campagne introuvable' });
+      if (campaign.status !== 'SUSPENDED') return res.status(400).json({ error: 'Seules les campagnes suspendues peuvent être relancées.' });
+      await campaign.update({ status: 'DRAFT' });
+      return res.status(200).json({ message: 'Campagne relancée avec succès.', campaign });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
 }

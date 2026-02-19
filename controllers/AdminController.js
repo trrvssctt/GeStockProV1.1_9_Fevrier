@@ -571,4 +571,45 @@ export class AdminController {
       return res.status(500).json({ error: 'ValidationError', message: 'Une erreur inattendue est survenue sur le serveur.' });
     }
   }
+
+  /**
+   * Reject a pending subscription/upgrade request
+   */
+  static async rejectSubscription(req, res) {
+    const transaction = await sequelize.transaction();
+    try {
+      const { id } = req.params; // tenant id
+      const tenant = await Tenant.findByPk(id, { transaction });
+      if (!tenant) {
+        await transaction.rollback();
+        return res.status(404).json({ error: 'Instance non trouvée' });
+      }
+
+      // Mark subscription as rejected
+      const sub = await Subscription.findOne({ where: { tenantId: id }, transaction });
+      if (sub) {
+        await sub.update({ status: 'REJECTED' }, { transaction });
+      }
+
+      await tenant.update({ paymentStatus: 'REJECTED' }, { transaction });
+
+      // Audit
+      await AuditLog.create({
+        tenantId: id,
+        userId: req.user?.id || null,
+        userName: req.user?.name || 'SYSTEM',
+        action: 'SUBSCRIPTION_UPGRADE_REJECTED',
+        resource: `Tenant: ${tenant.name} (${tenant.domain})`,
+        severity: 'MEDIUM',
+        sha256Signature: crypto.createHash('sha256').update(`REJECT_SUB:${id}:${Date.now()}`).digest('hex')
+      }, { transaction });
+
+      await transaction.commit();
+      return res.status(200).json({ message: 'Demande d\'upgrade rejetée.' });
+    } catch (error) {
+      if (transaction) await transaction.rollback();
+      console.error('[REJECT SUBSCRIPTION ERROR]:', error);
+      return res.status(500).json({ error: 'RejectError', message: error.message });
+    }
+  }
 }

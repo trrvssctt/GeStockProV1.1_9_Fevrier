@@ -24,6 +24,11 @@ Tenant.init({
   logoUrl: { type: DataTypes.TEXT, field: 'logo_url' },
   primaryColor: { type: DataTypes.STRING(7), defaultValue: '#4f46e5', field: 'primary_color' },
     cachetUrl: { type: DataTypes.TEXT, field: 'cachet_url' }, // Nouveau
+  // UI preferences persisted per-tenant
+  theme: { type: DataTypes.STRING(10), defaultValue: 'light', field: 'theme' },
+  fontFamily: { type: DataTypes.STRING, field: 'font_family' },
+  baseFontSize: { type: DataTypes.INTEGER, defaultValue: 14, field: 'base_font_size' },
+  buttonColor: { type: DataTypes.STRING(7), field: 'button_color' },
   
   // Paramètres Facturation
   invoicePrefix: { type: DataTypes.STRING(20), defaultValue: 'INV-', field: 'invoice_prefix' },

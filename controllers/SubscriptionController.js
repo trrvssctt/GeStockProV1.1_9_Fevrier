@@ -33,6 +33,53 @@ export class SubscriptionController {
   }
 
   /**
+   * Enregistre un paiement d'abonnement en statut PENDING pour validation par SuperAdmin
+   */
+  static async recordPayment(req, res) {
+    const transaction = await sequelize.transaction();
+    try {
+      const tenantId = req.user.tenantId;
+      const { subscriptionId, amount, period, transactionId, paymentMethod, reference } = req.body;
+
+      // create payment record
+      const payment = await Payment.create({
+        tenantId,
+        saleId: null,
+        amount: Number(amount) || 0,
+        method: paymentMethod || 'WAVE',
+        reference: reference || transactionId || `PAY-${Date.now()}`,
+        transactionId: transactionId || null,
+        status: 'PENDING',
+        paymentDate: new Date()
+      }, { transaction });
+
+      // mark tenant subscription/payment status as pending so admin sees it
+      const tenant = await Tenant.findByPk(tenantId, { transaction });
+      if (tenant) {
+        await tenant.update({ paymentStatus: 'PENDING' }, { transaction });
+      }
+
+      // Audit entry
+      await AuditLog.create({
+        tenantId,
+        userId: req.user?.id || null,
+        userName: req.user?.name || 'UNKNOWN',
+        action: 'SUBSCRIPTION_PAYMENT_SUBMITTED',
+        resource: `subscription:${subscriptionId || 'unknown'}`,
+        severity: 'MEDIUM',
+        sha256Signature: crypto.createHash('sha256').update(`${tenantId}:${payment.id}:${Date.now()}`).digest('hex')
+      }, { transaction });
+
+      await transaction.commit();
+
+      return res.status(200).json({ message: 'Paiement enregistré et en attente de validation.', payment });
+    } catch (error) {
+      if (transaction) await transaction.rollback();
+      return res.status(500).json({ error: 'RecordPaymentError', message: error.message });
+    }
+  }
+
+  /**
    * Récupère tous les plans actifs
    */
   static async listPlans(req, res) {
