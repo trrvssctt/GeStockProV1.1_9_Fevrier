@@ -21,8 +21,10 @@ router.get('/logs', AdminController.getLogs);
 // Tenants
 router.get('/tenants', AdminController.listTenants);
 router.get('/tenants/:id/billing', AdminController.getTenantBillingDetails);
+router.get('/tenants/:id/users', AdminController.listUsersForTenant);
 router.post('/tenants/:id/toggle-lock', AdminController.toggleTenantLock);
 router.post('/tenants/:id/subscription/validate', AdminController.validateSubscription);
+router.post('/tenants/:id/subscription/reject', AdminController.rejectSubscription);
 
 
 // Plans CRUD

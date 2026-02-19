@@ -25,6 +25,12 @@ router.get('/my-subscription', checkRole(['ADMIN']), SubscriptionController.getM
 router.post('/upgrade', checkRole(['ADMIN']), SubscriptionController.upgradePlan);
 
 /**
+ * @route POST /api/billing/pay
+ * @desc  Enregistre un paiement d'abonnement (pending) pour validation admin
+ */
+router.post('/pay', checkRole(['ADMIN']), SubscriptionController.recordPayment);
+
+/**
  * @route GET /api/billing/invoice/:paymentId
  * @desc  Génère/Télécharge la facture d'un paiement d'abonnement
  */

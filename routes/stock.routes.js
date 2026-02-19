@@ -25,5 +25,8 @@ router.post('/campaigns', checkPermission(['ADMIN', 'STOCK_MANAGER']), Inventory
 router.get('/campaigns/:id', checkPermission(['ADMIN', 'STOCK_MANAGER', 'SALES']), InventoryCampaignController.getDetails);
 router.put('/campaigns/:campaignId/items/:itemId', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.updateItem);
 router.post('/campaigns/:id/validate', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.validate);
+router.post('/campaigns/:id/suspend', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.suspend);
+router.post('/campaigns/:id/cancel', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.cancel);
+router.post('/campaigns/:id/resume', checkPermission(['ADMIN', 'STOCK_MANAGER']), InventoryCampaignController.resume);
 
 export default router;
