@@ -11,6 +11,7 @@ import salesRoutes from './sales.routes.js';
 import customerRoutes from './customers.routes.js';
 import billingRoutes from './billing.routes.js';
 import aiRoutes from './ai.routes.js';
+import { AIController } from '../controllers/AIController.js';
 import financeRoutes from './finance.routes.js';
 import documentRoutes from './document.routes.js';
 import resilienceRoutes from './resilience.routes.js';
@@ -28,6 +29,8 @@ const router = Router();
 router.post('/payments/callback', PaymentController.handleWebhook); // Route callback globale
 router.use('/auth', authRoutes);
 router.get('/plans', SubscriptionController.listPlans); 
+// Expose bridge as public to allow server-side forwarding from clients without requiring JWT
+router.post('/ai/bridge', AIController.bridgeWebhook);
 
 // --- PROTECTION JWT ---
 router.use(authenticateJWT);

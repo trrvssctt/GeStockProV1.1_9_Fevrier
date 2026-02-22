@@ -1,5 +1,8 @@
 
 import express from 'express';
+import dotenv from 'dotenv';
+// Load environment variables from .env early
+dotenv.config();
 import path from 'path';
 import cors from 'cors';
 import { connectDB } from './config/database.js';
@@ -12,8 +15,22 @@ const PORT = process.env.PORT || 3000;
 // Configuration Middlewares de base
 // Mise à jour CORS pour supporter les requêtes cross-origin du frontend
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
+const allowedOrigins = FRONTEND_URL.split(',').map(s => s.trim().replace(/\/$/, ''));
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Allow non-browser requests (curl, server-to-server) which have no origin
+    if (!origin) return callback(null, true);
+    // In dev, be permissive to avoid repeated CORS friction
+    if ((process.env.NODE_ENV || 'development') !== 'production') return callback(null, true);
+
+    const normalized = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(normalized)) return callback(null, true);
+
+    // Log rejected origin for debugging
+    // eslint-disable-next-line no-console
+    console.error('[CORS] Rejected origin:', origin, 'allowed:', allowedOrigins);
+    return callback(new Error('CORS policy: origin not allowed'), false);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id']
 }));

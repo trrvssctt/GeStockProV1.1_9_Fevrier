@@ -29,4 +29,9 @@ router.get('/insights', checkPermission(['ADMIN', 'STOCK_MANAGER']), AIControlle
  */
 router.post('/forecast-sync', checkPermission(['ADMIN']), AIController.updateForecasts);
 
+/**
+ * Proxy endpoint to call external AI webhook from server (avoids CORS)
+ */
+router.post('/bridge', AIController.bridgeWebhook);
+
 export default router;
