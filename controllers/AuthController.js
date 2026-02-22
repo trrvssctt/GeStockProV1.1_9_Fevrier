@@ -11,6 +11,13 @@ import crypto from 'crypto';
 
 
 export class AuthController {
+  // Helper to send sanitized error responses (avoid exposing raw error payloads to clients)
+  static sendSafeError(res, status, error, code = 'InternalServerError') {
+    // Log detailed error server-side for diagnostics
+    // eslint-disable-next-line no-console
+    console.error('[AUTH ERROR]:', error);
+    return res.status(status).json({ error: code, message: 'Une erreur est survenue. Veuillez réessayer plus tard.' });
+  }
   /**
    * Connexion spécifique pour le Maître du Kernel (SuperAdmin)
    */
@@ -30,8 +37,7 @@ export class AuthController {
       const token = AuthService.generateToken(user);
       return res.status(200).json({ token, user });
     } catch (error) {
-      console.error('[AUTH LOGIN ERROR]:', error);
-      return res.status(500).json({ error: 'InternalServerError', message: error.message });
+      return AuthController.sendSafeError(res, 500, error);
     }
   }
 
@@ -94,8 +100,7 @@ export class AuthController {
       return res.status(200).json({ message: 'Identifiants scellés avec succès.' });
     } catch (error) {
       if (transaction) await transaction.rollback();
-      console.error("[KERNEL SECURITY] Password Reset Failure:", error);
-      return res.status(500).json({ error: 'KernelPanic', message: 'Échec de la transaction sécurisée.' });
+      return AuthController.sendSafeError(res, 500, error, 'KernelPanic');
     }
   }
 
@@ -113,8 +118,7 @@ export class AuthController {
 
       return res.status(200).json({ mfaEnabled: user.mfaEnabled });
     } catch (error) {
-      console.error('[AUTH LOGIN ERROR]:', error);
-      return res.status(500).json({ error: 'AuthError', message: error.message });
+      return AuthController.sendSafeError(res, 500, error, 'AuthError');
     }
   }
   static async superAdminLogin(req, res) {
@@ -171,8 +175,7 @@ export class AuthController {
         }
       });
     } catch (error) {
-      console.error('[KERNEL AUTH CRITICAL ERROR]:', error);
-      return res.status(500).json({ error: 'AuthError', message: 'Erreur critique du Kernel d\'authentification.' });
+      return AuthController.sendSafeError(res, 500, error, 'AuthError');
     }
   }
 
@@ -233,6 +236,14 @@ static async login(req, res) {
         }
       }
 
+      // Update last login timestamp for the user and generate the token including planId
+      try {
+        await user.update({ lastLogin: new Date() });
+      } catch (uErr) {
+        // non-blocking: log but continue
+        console.warn('[AUTH] Failed to update lastLogin for user', user.id, uErr && uErr.message);
+      }
+
       // 4. Génération du token incluant le planId pour le frontend
       const token = AuthService.generateToken({
         ...user.toJSON(),
@@ -255,9 +266,14 @@ static async login(req, res) {
         tenant: { isActive: tenant.isActive, paymentStatus: tenant.paymentStatus }
       };
 
+      // Include lastLogin timestamp in response (snake_case compatibility)
+      responseUser.lastLogin = user.lastLogin || user.last_login || null;
+      responseUser.last_login = responseUser.lastLogin;
+      
+
       return res.status(200).json({ token, user: responseUser });
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      return AuthController.sendSafeError(res, 500, error);
     }
   }
 
@@ -349,11 +365,8 @@ static async login(req, res) {
       });
     } catch (error) {
       if (transaction) await transaction.rollback();
-      return res.status(500).json({ 
-        error: 'RegisterError', 
-        message: 'Échec du déploiement de l\'instance.',
-        details: error.message 
-      });
+      // Keep server logs, but return sanitized client message
+      return AuthController.sendSafeError(res, 500, error, 'RegisterError');
     }
   }
 
@@ -362,7 +375,7 @@ static async login(req, res) {
       const users = await User.findAll({ where: { tenantId: req.user.tenantId } });
       return res.status(200).json(users);
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      return AuthController.sendSafeError(res, 500, error);
     }
   }
 
@@ -372,7 +385,7 @@ static async login(req, res) {
       if (!user) return res.status(404).json({ error: 'User not found' });
       return res.status(200).json(user);
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      return AuthController.sendSafeError(res, 500, error);
     }
   }
 
@@ -384,7 +397,10 @@ static async login(req, res) {
       });
       return res.status(201).json(user);
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      // Validation/client errors can still return the message, but avoid object dumps
+      // eslint-disable-next-line no-console
+      console.error('[AUTH CREATE USER ERROR]:', error);
+      return res.status(400).json({ error: 'BadRequest', message: 'Requête invalide.' });
     }
   }
 
@@ -402,7 +418,9 @@ static async login(req, res) {
       await user.update(req.body);
       return res.status(200).json(user);
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      // eslint-disable-next-line no-console
+      console.error('[AUTH UPDATE USER ERROR]:', error);
+      return res.status(400).json({ error: 'BadRequest', message: 'Requête invalide.' });
     }
   }
 
@@ -413,7 +431,7 @@ static async login(req, res) {
       await user.destroy();
       return res.status(204).send();
     } catch (error) {
-      return res.status(500).json({ error: error.message });
+      return AuthController.sendSafeError(res, 500, error);
     }
   }
 }
