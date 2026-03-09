@@ -6,16 +6,31 @@ export const sequelize = new Sequelize('gestionapp_stockgestion_13_janv_2026', '
   host: 'postgresql-gestionapp.alwaysdata.net',
   port: 5432,
   dialect: 'postgres',
-  logging: false,
+  logging: false,  // Désactiver les logs SQL
   define: {
     underscored: true,
     timestamps: true
   },
+  retry: {
+    match: [
+      /ConnectionError/,
+      /ConnectionRefusedError/,
+      /ConnectionTimedOutError/,
+      /TimeoutError/,
+      /SequelizeConnectionError/,
+      /ETIMEDOUT/,
+      /ECONNRESET/,
+      /ENOTFOUND/,
+      /ENETUNREACH/,
+      /ECONNREFUSED/
+    ],
+    max: 3
+  },
   pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
+    max: 8, // Augmenté pour gérer plus de connexions simultanées
+    min: 2, // Maintenir quelques connexions ouvertes
+    acquire: 60000, // Augmenté à 60 secondes
+    idle: 20000 // Augmenté à 20 secondes avant fermeture
   },
   dialectOptions: {
     ssl: {
@@ -31,11 +46,26 @@ export const sequelize_db_template = new Sequelize('gestionapp_saas_gestockpro_b
   port: 3306,
   dialect: 'mysql',
   logging: false,
+  retry: {
+    match: [
+      /ConnectionError/,
+      /ConnectionRefusedError/,
+      /ConnectionTimedOutError/,
+      /TimeoutError/,
+      /SequelizeConnectionError/,
+      /ETIMEDOUT/,
+      /ECONNRESET/,
+      /ENOTFOUND/,
+      /ENETUNREACH/,
+      /ECONNREFUSED/
+    ],
+    max: 3
+  },
   pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
+    max: 8, // Augmenté pour gérer plus de connexions simultanées
+    min: 2, // Maintenir quelques connexions ouvertes
+    acquire: 60000, // Augmenté à 60 secondes
+    idle: 20000 // Augmenté à 20 secondes avant fermeture
   }
 });
 

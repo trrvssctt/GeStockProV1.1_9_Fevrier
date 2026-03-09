@@ -33,6 +33,11 @@ User.init({
     defaultValue: ['EMPLOYEE'],
     allowNull: false
   },
+  employeeId: { 
+    type: DataTypes.UUID, 
+    allowNull: true, 
+    field: 'employee_id' 
+  },
   role: { 
     type: DataTypes.STRING(30),
     defaultValue: 'EMPLOYEE'

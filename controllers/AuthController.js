@@ -372,7 +372,21 @@ static async login(req, res) {
 
   static async listUsers(req, res) {
     try {
-      const users = await User.findAll({ where: { tenantId: req.user.tenantId } });
+      // Import Employee dynamiquement pour éviter les imports circulaires
+      const { Employee } = await import('../models/Employee.js');
+      
+      const users = await User.findAll({ 
+        where: { tenantId: req.user.tenantId },
+        include: [
+          {
+            model: Employee,
+            as: 'employeeProfile',
+            attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'departmentId', 'position'],
+            required: false
+          }
+        ],
+        order: [['name', 'ASC']]
+      });
       return res.status(200).json(users);
     } catch (error) {
       return AuthController.sendSafeError(res, 500, error);
@@ -389,12 +403,88 @@ static async login(req, res) {
     }
   }
 
+  /**
+   * Récupérer les employés sans compte utilisateur associé (ENTERPRISE uniquement)
+   */
+  static async getAvailableEmployees(req, res) {
+    try {
+      // Import Employee dynamiquement pour éviter les imports circulaires
+      const { Employee } = await import('../models/Employee.js');
+      
+      // Récupérer les employés qui n'ont pas de compte utilisateur associé
+      const availableEmployees = await Employee.findAll({
+        where: {
+          tenantId: req.user.tenantId,
+          id: {
+            [Op.notIn]: sequelize.literal(`(
+              SELECT employee_id 
+              FROM users 
+              WHERE employee_id IS NOT NULL 
+              AND tenant_id = '${req.user.tenantId}'
+            )`)
+          }
+        },
+        attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'departmentId', 'position'],
+        order: [['firstName', 'ASC'], ['lastName', 'ASC']]
+      });
+
+      return res.status(200).json(availableEmployees);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[AUTH GET AVAILABLE EMPLOYEES ERROR]:', error);
+      return res.status(500).json({ error: 'InternalServerError', message: 'Une erreur est survenue.' });
+    }
+  }
+
   static async createUser(req, res) {
     try {
-      const user = await User.create({ 
+      const userData = { 
         ...req.body, 
         tenantId: req.user.tenantId 
-      });
+      };
+
+      // S'assurer que employeeId est null si non fourni ou vide 
+      if (!req.body.employeeId || req.body.employeeId.trim() === '') {
+        userData.employeeId = null;
+      } else {
+        // Pour les plans ENTERPRISE, permettre l'association avec un employé existant
+        // Import Employee dynamiquement pour éviter les imports circulaires
+        const { Employee } = await import('../models/Employee.js');
+        
+        // Vérifier que l'employé existe et appartient au bon tenant
+        const employee = await Employee.findOne({
+          where: {
+            id: req.body.employeeId,
+            tenantId: req.user.tenantId
+          }
+        });
+        
+        if (!employee) {
+          return res.status(404).json({ 
+            error: 'EmployeeNotFound', 
+            message: 'Employé introuvable.' 
+          });
+        }
+
+        // Vérifier qu'aucun utilisateur n'est déjà associé à cet employé
+        const existingUser = await User.findOne({
+          where: {
+            employeeId: req.body.employeeId,
+            tenantId: req.user.tenantId
+          }
+        });
+        
+        if (existingUser) {
+          return res.status(409).json({
+            error: 'UserAlreadyExists',
+            message: 'Un utilisateur existe déjà pour cet employé.'
+          });
+        }
+
+        userData.employeeId = req.body.employeeId;
+      }
+
+      const user = await User.create(userData);
       return res.status(201).json(user);
     } catch (error) {
       // Validation/client errors can still return the message, but avoid object dumps
