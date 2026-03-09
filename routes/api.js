@@ -22,6 +22,7 @@ import servicesRoutes from './services.routes.js';
 import { TenantController } from '../controllers/TenantController.js';
 import { SubscriptionController } from '../controllers/SubscriptionController.js';
 import { PaymentController } from '../controllers/PaymentController.js';
+import hrRoutes from './hr.routes.js';
 
 const router = Router();
 
@@ -48,8 +49,12 @@ router.use('/documents', tenantIsolation, documentRoutes);
 router.use('/resilience', tenantIsolation, resilienceRoutes);
 router.use('/recovery', tenantIsolation, recoveryRoutes);
 router.use('/services', tenantIsolation, servicesRoutes);
+router.use('/hr', tenantIsolation, hrRoutes);
 
 router.get('/settings', tenantIsolation, checkPermission(['ADMIN', 'SALES', 'STOCK_MANAGER', 'ACCOUNTANT']), TenantController.getSettings);
 router.put('/settings', tenantIsolation, checkPermission(['ADMIN']), TenantController.updateSettings);
+
+// Route pour récupérer les informations du tenant 
+router.get('/tenant/info', tenantIsolation, checkPermission(['ADMIN', 'SALES', 'STOCK_MANAGER', 'ACCOUNTANT', 'EMPLOYEE']), TenantController.getSettings);
 
 export default router;

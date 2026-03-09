@@ -9,7 +9,8 @@ const router = Router();
  * @route POST /api/documents/upload
  * @desc  Upload d'un document (Multer doit être configuré au niveau de l'app)
  */
-router.post('/upload', checkPermission(['ADMIN', 'MANAGER', 'SALES']), DocumentController.upload);
+// Allow HR_MANAGER to upload employee documents as well
+router.post('/upload', checkPermission(['ADMIN', 'MANAGER', 'SALES', 'HR_MANAGER']), DocumentController.upload);
 
 /**
  * @route GET /api/documents/entity/:type/:id

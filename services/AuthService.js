@@ -26,14 +26,16 @@ export class AuthService {
    */
   static generateToken(user) {
     const userRoles = Array.isArray(user.roles) ? user.roles : [user.role || 'EMPLOYEE'];
-    
+
     return jwt.sign(
-      { 
-        id: user.id, 
-        tenantId: user.tenantId, 
-        roles: userRoles, 
+      {
+        id: user.id,
+        tenantId: user.tenantId,
+        roles: userRoles,
         role: userRoles[0], // Compatibilité descendante
-        name: user.name 
+        name: user.name,
+        employeeId: user.employeeId, // ✅ Ajouter le employeeId dans le JWT
+        planId: user.planId || undefined   // Inclus pour que /me retourne le plan
       },
       JWT_SECRET,
       { expiresIn: '24h' }

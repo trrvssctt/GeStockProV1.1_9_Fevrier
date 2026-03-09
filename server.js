@@ -31,7 +31,7 @@ app.use(cors({
     console.error('[CORS] Rejected origin:', origin, 'allowed:', allowedOrigins);
     return callback(new Error('CORS policy: origin not allowed'), false);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id']
 }));
 
